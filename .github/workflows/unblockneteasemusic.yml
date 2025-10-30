@@ -1,7 +1,5 @@
-name: Build UnblockNeteaseMusic Installer
-
 on:
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -10,95 +8,80 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-
-      - name: Fetch latest release tag from UnblockNeteaseMusic
+      
+      - name: Fetch latest release tag from luci-app-unblockneteasemusic
         id: fetch_latest_tag
         run: |
-          # 从目标仓库获取最新 tag
           latest_tag=$(curl -s https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest | jq -r '.tag_name')
           echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
-          echo "Latest tag found: $latest_tag"
-
+          
       - name: Clone makeself repository
         run: git clone https://github.com/megastep/makeself.git
 
-      - name: Download latest UnblockNeteaseMusic ipk files
+      - name: Download latest unblockneteasemusic files
         run: |
-          # 创建架构目录
-          mkdir unm_aarch64_cortex-a53
-          mkdir unm_x86_64
+          # 下载最新 release 的 ipk 包
+          mkdir -p unblockneteasemusic_all
+          cd unblockneteasemusic_all
           
-          # 获取最新 release 的 JSON 数据
-          JSON_URL="https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest"
-          RELEASE_JSON=$(curl -s $JSON_URL)
+          # 获取所有 ipk 文件的下载链接
+          curl -s https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest | \
+            jq -r '.assets[] | select(.name | endswith(".ipk")) | .browser_download_url' | \
+            xargs -n 1 curl -LO
           
-          # 1. 下载通用的 luci-app ..._all.ipk
-          ALL_IPK_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | contains("luci-app-unblockneteasemusic") and contains("_all.ipk")) | .browser_download_url')
-          echo "Downloading common package: $ALL_IPK_URL"
-          curl -LO "$ALL_IPK_URL"
-          ALL_IPK_NAME=$(basename "$ALL_IPK_URL")
-          
-          # 复制 'all.ipk' 到两个目录
-          cp "$ALL_IPK_NAME" unm_aarch64_cortex-a53/
-          cp "$ALL_IPK_NAME" unm_x86_64/
-          
-          # 2. 下载 aarch64 核心包
-          AARCH64_IPK_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | contains("unblockneteasemusic_") and contains("aarch64_cortex-a53.ipk")) | .browser_download_url')
-          echo "Downloading aarch64 package: $AARCH64_IPK_URL"
-          curl -L -o unm_aarch64_cortex-a53/$(basename "$AARCH64_IPK_URL") "$AARCH64_IPK_URL"
-          
-          # 3. 下载 x86_64 核心包
-          X86_64_IPK_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | contains("unblockneteasemusic_") and contains("x86_64.ipk")) | .browser_download_url')
-          echo "Downloading x86_64 package: $X86_64_IPK_URL"
-          curl -L -o unm_x86_64/$(basename "$X86_64_IPK_URL") "$X86_64_IPK_URL"
+          cd ..
 
-          echo "Downloads complete. Files:"
-          ls -R unm_*
-
-      - name: Create install.sh scripts
+      - name: Organize files
         run: |
-          # 为 x86_64 创建安装脚本
-          cat <<EOF > unm_x86_64/install.sh
+          pushd "unblockneteasemusic_all" >/dev/null || exit 1
+          
+          # 去除文件名中的 ~ 字符
+          for file in *~*.ipk; do
+            [ -e "$file" ] || continue
+            new_file="$(echo "$file" | tr -d '~')"
+            if [ -e "$new_file" ]; then
+              echo "目标文件已存在，跳过: $new_file"
+              continue
+            fi
+            mv "$file" "$new_file"
+            echo "已重命名: $file -> $new_file"
+          done
+          
+          popd >/dev/null
+          
+      - name: Create install.sh script
+        run: |
+          cat <<'EOF' > unblockneteasemusic_all/install.sh
           #!/bin/sh
-          echo "Updating opkg lists..."
           opkg update
           if [ $? -ne 0 ]; then
-              echo "opkg update failed. Proceeding with installation anyway..."
+              echo "update failed."
+              exit 1
           fi
-          echo "Installing UnblockNeteaseMusic packages..."
           opkg install *.ipk
-          echo "Installation complete."
           EOF
-          chmod +x unm_x86_64/install.sh
+          chmod +x unblockneteasemusic_all/install.sh
           
-          # 复制脚本到 aarch64 目录
-          cp unm_x86_64/install.sh unm_aarch64_cortex-a53/install.sh
-
-      - name: Move UnblockNeteaseMusic directories to makeself
+      - name: Move directory to makeself
         run: |
-          mv unm_x86_64 makeself/
-          mv unm_aarch64_cortex-a53 makeself/
-
-      - name: Create self-extracting packages
+          mv unblockneteasemusic_all makeself/
+          
+      - name: Create self-extracting package
         run: |
           cd makeself
-          echo "Creating x86_64 package..."
-          ./makeself.sh unm_x86_64/ unm_${{ env.LATEST_TAG }}_x86_64.run "UnblockNeteaseMusic Installer" ./install.sh
+          ./makeself.sh unblockneteasemusic_all/ luci-app-unblockneteasemusic_${{ env.LATEST_TAG }}_all.run "UnblockNeteaseMusic installer by github action" ./install.sh
           
-          echo "Creating aarch64 package..."
-          ./makeself.sh unm_aarch64_cortex-a53/ unm_${{ env.LATEST_TAG }}_aarch64_cortex-a53.run "UnblockNeteaseMusic Installer" ./install.sh
-
-      - name: Check file sizes
+      - name: Check file size
         run: |
-          ls -lh makeself/unm_*.run
-
-      - name: Upload run files as release assets
+          ls -lh makeself/luci-app-unblockneteasemusic_*.run
+          
+      - name: Upload run file as release asset
         uses: softprops/action-gh-release@v2.1.0
         with:
-          tag_name: unblockneteasemusic # 上传到你仓库中这个固定的 tag
-          name: "luci-app-unblockneteasemusic" # Release 的名称
-          files: makeself/unm_*.run # 要上传的文件
+          tag_name: unblockneteasemusic
+          name: "luci-app-unblockneteasemusic"
+          files: makeself/*.run
           token: ${{ secrets.GITHUB_TOKEN }}
-          body: "[![Github](https://img.shields.io/badge/可套用国内加速站下载-FC7C0D?logo=github&logoColor=fff&labelColor=000&style=for-the-badge)](https://wkdaily.cpolar.cn/archives/1)"
+          body: "[!Github [<sup>1</sup>](https://img.shields.io/badge/可套用国内加速站下载-FC7C0D?logo=github&logoColor=fff&labelColor=000&style=for-the-badge)](https://wkdaily.cpolar.cn/archives/1)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
