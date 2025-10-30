@@ -1,0 +1,129 @@
+#=================================================
+# https://github.com/wukongdaily/RunFilesBuilder
+# Description: Build RunFiles using GitHub Actions
+# License: MIT
+# Author: wukongdaily (Adapted by Gemini)
+#=================================================
+
+name: Make UnblockNeteaseMusic Run File
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch latest release tag from UnblockNeteaseMusic
+        id: fetch_latest_tag
+        run: |
+          latest_tag=$(curl -s https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest | jq -r '.tag_name')
+          echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+
+      - name: Clone makeself repository
+        run: git clone https://github.com/megastep/makeself.git
+
+      - name: Download latest unblockneteasemusic files
+        run: |
+          # 创建目标目录
+          mkdir -p unblockneteasemusic_x86_64
+          mkdir -p unblockneteasemusic_aarch64_cortex-a53
+          
+          API_URL="https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest"
+          
+          # 1. 使用 jq 获取三个关键 IPK 的下载 URL
+          # luci-app (通用)
+          LUCI_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | startswith("luci-app-unblockneteasemusic_")).browser_download_url')
+          # aarch64 核心 (适用于 R5C 等)
+          AARCH64_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | contains("linux-arm64_")).browser_download_url')
+          # x86_64 核心
+          X86_64_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | contains("linux-amd64_")).browser_download_url')
+
+          echo "Downloading LuCI App: $LUCI_URL"
+          echo "Downloading AARCH64 Core: $AARCH64_URL"
+          echo "Downloading X86_64 Core: $X86_64_URL"
+          
+          # 2. 将文件下载到各自的目录
+          wget -P unblockneteasemusic_x86_64 $LUCI_URL
+          wget -P unblockneteasemusic_x86_64 $X86_64_URL
+          
+          wget -P unblockneteasemusic_aarch64_cortex-a53 $LUCI_URL
+          wget -P unblockneteasemusic_aarch64_cortex-a53 $AARCH64_URL
+
+      - name: Organize files for aarch64_cortex-a53 & x86_64
+        run: |
+          # (此步骤用于移除文件名中的 ~ 字符，UnblockNeteaseMusic 的包名中包含~)
+          pushd "unblockneteasemusic_x86_64" >/dev/null || exit 1
+          for file in *~*.ipk; do
+            [ -e "$file" ] || continue
+            new_file="$(echo "$file" | tr -d '~')"
+            if [ -e "$new_file" ]; then
+              echo "目标文件已存在，跳过: $new_file"
+              continue
+            fi
+            mv "$file" "$new_file"
+            echo "已重命名: $file -> $new_file"
+          done
+          popd >/dev/null
+          
+          pushd "unblockneteasemusic_aarch64_cortex-a53" >/dev/null || exit 1
+          for file in *~*.ipk; do
+            [ -e "$file" ] || continue
+            new_file="$(echo "$file" | tr -d '~')"
+            if [ -e "$new_file" ]; then
+              echo "目标文件已存在，跳过: $new_file"
+              continue
+            fi
+            mv "$file" "$new_file"
+            echo "已重命名: $file -> $new_file"
+          done
+          popd >/dev/null
+
+      - name: Create install.sh scripts
+        run: |
+          # (这个安装脚本是通用的，无需修改)
+          cat <<EOF > unblockneteasemusic_x86_64/install.sh
+          #!/bin/sh
+          echo "Starting opkg update..."
+          opkg update
+          if [ \$? -ne 0 ]; then
+              echo "opkg update failed. Proceeding with install anyway..."
+          fi
+          echo "Installing IPK packages..."
+          opkg install *.ipk
+          echo "Installation finished."
+          EOF
+          chmod +x unblockneteasemusic_x86_64/install.sh
+          cp unblockneteasemusic_x86_64/install.sh unblockneteasemusic_aarch64_cortex-a53/install.sh
+
+      - name: Move directories to makeself
+        run: |
+          mv unblockneteasemusic_x86_64 makeself/
+          mv unblockneteasemusic_aarch64_cortex-a53 makeself/
+
+      - name: Create self-extracting packages
+        run: |
+          cd makeself
+          # 使用获取到的 LATEST_TAG 变量来命名
+          ./makeself.sh unblockneteasemusic_x86_64/ unblockneteasemusic_${{ env.LATEST_TAG }}_x86_64.run "by github action" ./install.sh
+          ./makeself.sh unblockneteasemusic_aarch64_cortex-a53/ unblockneteasemusic_${{ env.LATEST_TAG }}_aarch64_cortex-a53.run "by github action" ./install.sh
+
+      - name: Check file sizes
+        run: |
+          ls -lh makeself/unblockneteasemusic_*.run
+
+      - name: Upload run files as release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          # (这将把 .run 文件上传到您自己仓库的 Release 页面)
+          tag_name: unblockneteasemusic
+          name: "luci-app-unblockneteasemusic"
+          files: makeself/unblockneteasemusic_*.run
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: "[![Github](https://img.shields.io/badge/可套用国内加速站下载-FC7C0D?logo=github&logoColor=fff&labelColor=000&style=for-the-badge)](https://wkdaily.cpolar.cn/archives/1)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
