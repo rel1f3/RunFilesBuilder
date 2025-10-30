@@ -1,14 +1,7 @@
-#=================================================
-# https://github.com/wukongdaily/RunFilesBuilder
-# Description: Build RunFiles using GitHub Actions
-# License: MIT
-# Author: wukongdaily (Adapted by Gemini)
-#=================================================
-
-name: Make UnblockNeteaseMusic Run File
+name: Build UnblockNeteaseMusic Installer
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   build:
@@ -16,113 +9,95 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Fetch latest release tag from UnblockNeteaseMusic
         id: fetch_latest_tag
         run: |
+          # 从目标仓库获取最新 tag
           latest_tag=$(curl -s https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest | jq -r '.tag_name')
           echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+          echo "Latest tag found: $latest_tag"
 
       - name: Clone makeself repository
         run: git clone https://github.com/megastep/makeself.git
 
-      - name: Download latest unblockneteasemusic files
+      - name: Download latest UnblockNeteaseMusic ipk files
         run: |
-          # 创建目标目录
-          mkdir -p unblockneteasemusic_x86_64
-          mkdir -p unblockneteasemusic_aarch64_cortex-a53
+          # 创建架构目录
+          mkdir unm_aarch64_cortex-a53
+          mkdir unm_x86_64
           
-          API_URL="https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest"
+          # 获取最新 release 的 JSON 数据
+          JSON_URL="https://api.github.com/repos/UnblockNeteaseMusic/luci-app-unblockneteasemusic/releases/latest"
+          RELEASE_JSON=$(curl -s $JSON_URL)
           
-          # 1. 使用 jq 获取三个关键 IPK 的下载 URL
-          # luci-app (通用)
-          LUCI_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | startswith("luci-app-unblockneteasemusic_")).browser_download_url')
-          # aarch64 核心 (适用于 R5C 等)
-          AARCH64_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | contains("linux-arm64_")).browser_download_url')
-          # x86_64 核心
-          X86_64_URL=$(curl -s $API_URL | jq -r '.assets[] | select(.name | contains("linux-amd64_")).browser_download_url')
+          # 1. 下载通用的 luci-app ..._all.ipk
+          ALL_IPK_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | contains("luci-app-unblockneteasemusic") and contains("_all.ipk")) | .browser_download_url')
+          echo "Downloading common package: $ALL_IPK_URL"
+          curl -LO "$ALL_IPK_URL"
+          ALL_IPK_NAME=$(basename "$ALL_IPK_URL")
+          
+          # 复制 'all.ipk' 到两个目录
+          cp "$ALL_IPK_NAME" unm_aarch64_cortex-a53/
+          cp "$ALL_IPK_NAME" unm_x86_64/
+          
+          # 2. 下载 aarch64 核心包
+          AARCH64_IPK_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | contains("unblockneteasemusic_") and contains("aarch64_cortex-a53.ipk")) | .browser_download_url')
+          echo "Downloading aarch64 package: $AARCH64_IPK_URL"
+          curl -L -o unm_aarch64_cortex-a53/$(basename "$AARCH64_IPK_URL") "$AARCH64_IPK_URL"
+          
+          # 3. 下载 x86_64 核心包
+          X86_64_IPK_URL=$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | contains("unblockneteasemusic_") and contains("x86_64.ipk")) | .browser_download_url')
+          echo "Downloading x86_64 package: $X86_64_IPK_URL"
+          curl -L -o unm_x86_64/$(basename "$X86_64_IPK_URL") "$X86_64_IPK_URL"
 
-          echo "Downloading LuCI App: $LUCI_URL"
-          echo "Downloading AARCH64 Core: $AARCH64_URL"
-          echo "Downloading X86_64 Core: $X86_64_URL"
-          
-          # 2. 将文件下载到各自的目录
-          wget -P unblockneteasemusic_x86_64 $LUCI_URL
-          wget -P unblockneteasemusic_x86_64 $X86_64_URL
-          
-          wget -P unblockneteasemusic_aarch64_cortex-a53 $LUCI_URL
-          wget -P unblockneteasemusic_aarch64_cortex-a53 $AARCH64_URL
-
-      - name: Organize files for aarch64_cortex-a53 & x86_64
-        run: |
-          # (此步骤用于移除文件名中的 ~ 字符，UnblockNeteaseMusic 的包名中包含~)
-          pushd "unblockneteasemusic_x86_64" >/dev/null || exit 1
-          for file in *~*.ipk; do
-            [ -e "$file" ] || continue
-            new_file="$(echo "$file" | tr -d '~')"
-            if [ -e "$new_file" ]; then
-              echo "目标文件已存在，跳过: $new_file"
-              continue
-            fi
-            mv "$file" "$new_file"
-            echo "已重命名: $file -> $new_file"
-          done
-          popd >/dev/null
-          
-          pushd "unblockneteasemusic_aarch64_cortex-a53" >/dev/null || exit 1
-          for file in *~*.ipk; do
-            [ -e "$file" ] || continue
-            new_file="$(echo "$file" | tr -d '~')"
-            if [ -e "$new_file" ]; then
-              echo "目标文件已存在，跳过: $new_file"
-              continue
-            fi
-            mv "$file" "$new_file"
-            echo "已重命名: $file -> $new_file"
-          done
-          popd >/dev/null
+          echo "Downloads complete. Files:"
+          ls -R unm_*
 
       - name: Create install.sh scripts
         run: |
-          # (这个安装脚本是通用的，无需修改)
-          cat <<EOF > unblockneteasemusic_x86_64/install.sh
+          # 为 x86_64 创建安装脚本
+          cat <<EOF > unm_x86_64/install.sh
           #!/bin/sh
-          echo "Starting opkg update..."
+          echo "Updating opkg lists..."
           opkg update
-          if [ \$? -ne 0 ]; then
-              echo "opkg update failed. Proceeding with install anyway..."
+          if [ $? -ne 0 ]; then
+              echo "opkg update failed. Proceeding with installation anyway..."
           fi
-          echo "Installing IPK packages..."
+          echo "Installing UnblockNeteaseMusic packages..."
           opkg install *.ipk
-          echo "Installation finished."
+          echo "Installation complete."
           EOF
-          chmod +x unblockneteasemusic_x86_64/install.sh
-          cp unblockneteasemusic_x86_64/install.sh unblockneteasemusic_aarch64_cortex-a53/install.sh
+          chmod +x unm_x86_64/install.sh
+          
+          # 复制脚本到 aarch64 目录
+          cp unm_x86_64/install.sh unm_aarch64_cortex-a53/install.sh
 
-      - name: Move directories to makeself
+      - name: Move UnblockNeteaseMusic directories to makeself
         run: |
-          mv unblockneteasemusic_x86_64 makeself/
-          mv unblockneteasemusic_aarch64_cortex-a53 makeself/
+          mv unm_x86_64 makeself/
+          mv unm_aarch64_cortex-a53 makeself/
 
       - name: Create self-extracting packages
         run: |
           cd makeself
-          # 使用获取到的 LATEST_TAG 变量来命名
-          ./makeself.sh unblockneteasemusic_x86_64/ unblockneteasemusic_${{ env.LATEST_TAG }}_x86_64.run "by github action" ./install.sh
-          ./makeself.sh unblockneteasemusic_aarch64_cortex-a53/ unblockneteasemusic_${{ env.LATEST_TAG }}_aarch64_cortex-a53.run "by github action" ./install.sh
+          echo "Creating x86_64 package..."
+          ./makeself.sh unm_x86_64/ unm_${{ env.LATEST_TAG }}_x86_64.run "UnblockNeteaseMusic Installer" ./install.sh
+          
+          echo "Creating aarch64 package..."
+          ./makeself.sh unm_aarch64_cortex-a53/ unm_${{ env.LATEST_TAG }}_aarch64_cortex-a53.run "UnblockNeteaseMusic Installer" ./install.sh
 
       - name: Check file sizes
         run: |
-          ls -lh makeself/unblockneteasemusic_*.run
+          ls -lh makeself/unm_*.run
 
       - name: Upload run files as release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.1.0
         with:
-          # (这将把 .run 文件上传到您自己仓库的 Release 页面)
-          tag_name: unblockneteasemusic
-          name: "luci-app-unblockneteasemusic"
-          files: makeself/unblockneteasemusic_*.run
+          tag_name: unblockneteasemusic # 上传到你仓库中这个固定的 tag
+          name: "luci-app-unblockneteasemusic" # Release 的名称
+          files: makeself/unm_*.run # 要上传的文件
           token: ${{ secrets.GITHUB_TOKEN }}
           body: "[![Github](https://img.shields.io/badge/可套用国内加速站下载-FC7C0D?logo=github&logoColor=fff&labelColor=000&style=for-the-badge)](https://wkdaily.cpolar.cn/archives/1)"
         env:
