@@ -13,7 +13,7 @@
 ![Github](https://img.shields.io/badge/DUFS文件服务器.run-123456?logo=github&logoColor=fff&labelColor=00ae9d&style=for-the-badge)
 ![Github](https://img.shields.io/badge/OPENLIST2.run-123456?logo=github&logoColor=000&labelColor=ffff00&style=for-the-badge)
 # RunFilesBuilder 
-<img src="https://img.shields.io/github/downloads/wukongdaily/RunFilesBuilder/total.svg?style=for-the-badge&color=32C955"/>  [![GitHub Release](https://img.shields.io/github/v/release/wukongdaily/RunFilesBuilder?style=for-the-badge&logoColor=green&color=%23E1A8CD)](https://github.com/wukongdaily/RunFilesBuilder/releases)
+
 
 # [每日构建 DailyBuild] 👇🏻 [【点此处讨论】](https://github.com/wukongdaily/RunFilesBuilder/discussions/41)
 https://github.com/wkccd/CloudRunFilesBuilder/releases
@@ -34,7 +34,8 @@ https://github.com/wkccd/CloudRunFilesBuilder/releases
 https://wkdaily.cpolar.cn/archives/makerun
 ## run文件安装方法
 ## Install by iStore 
-<img src=https://camo.githubusercontent.com/0a783d7ece59c727a1eef024855606c2b87be6acec14192e8103cf8c601d44eb/68747470733a2f2f63646e2e6a7364656c6976722e6e65742f67682f41554b393532372f4172652d752d6f6b406d61737465722f617070732f696e7374616c6c2e706e67>
+![1](https://github.com/user-attachments/assets/04e505cb-a217-4f52-b5c2-cbf68d297093)
+
 
 
 ## Install By Command
@@ -50,23 +51,27 @@ wget -qO imm.sh https://cafe.cpolar.top/wkdaily/zero3/raw/branch/main/zero3/imm.
 
 ```
 
-## 赞助作者 
 
-[![赞助我](https://img.shields.io/badge/赞助我-支持作者的项目-orange?logo=github)](https://wkdaily.cpolar.top/01)
+
+<a href="https://wkdaily.cpolar.top/01" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
+       alt="Buy Me A Coffee"
+       style="width:20%; height:auto;">
+</a>
 
 <details>
 <summary><h2>🍭鸣谢和引用的项目 👇🏿</h2></summary>
   
 > 【打包】https://github.com/megastep/makeself
-> > 【引用】https://github.com/xiaorouji/openwrt-passwall<br>
-> > 【引用】https://github.com/xiaorouji/openwrt-passwall2<br>
-> > 【引用】https://github.com/vernesong/OpenClash<br>
+> > 【引用】https://github.com/AdguardTeam/AdGuardHome/releases/latest<br>
 > > 【引用】https://dl.openwrt.ai<br>
 > > 【引用】https://github.com/nikkinikki-org/OpenWrt-nikki<br>
 > > 【引用】https://github.com/nikkinikki-org/OpenWrt-momo<br>
-> > 【引用】https://github.com/AdguardTeam/AdGuardHome/releases/latest<br>
 > > 【引用】https://github.com/sbwml/luci-app-mosdns<br>
 > > 【引用】https://github.com/sbwml/luci-app-openlist2<br>
-> > 【引用】https://downloads.immortalwrt.org
+> > 【引用】https://downloads.immortalwrt.org<br>
+> > 【引用】https://github.com/Openwrt-Passwall/openwrt-passwall<br>
+> > 【引用】https://github.com/Openwrt-Passwall/openwrt-passwall2<br>
+> > 【引用】https://github.com/vernesong/OpenClash<br>
 
 
